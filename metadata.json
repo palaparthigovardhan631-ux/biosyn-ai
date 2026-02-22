@@ -1,0 +1,8 @@
+{
+  "name": "BioSyn AI",
+  "description": "An advanced AI-powered health assistant that provides preliminary health perceptions, symptom analysis, and wellness guidance based on user input.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
