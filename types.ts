@@ -8,10 +8,30 @@ export enum Severity {
 
 export type Language = 'English' | 'Spanish' | 'French' | 'German' | 'Chinese' | 'Arabic' | 'Hindi' | 'Portuguese' | 'Japanese' | 'Telugu';
 
+export interface HealthHistoryItem {
+  id: string;
+  date: string;
+  symptoms: string;
+  perception: string;
+  severity: Severity;
+  fullReport?: HealthPerception;
+}
+
 export interface User {
   email: string;
   name: string;
   picture?: string;
+  age?: number;
+  gender?: string;
+  medicalHistory?: string;
+  bloodType?: string;
+  weight?: string;
+  height?: string;
+  mobile?: string;
+  instagram?: string;
+  address?: string;
+  healthHistory?: HealthHistoryItem[];
+  chatHistory?: ChatMessage[];
 }
 
 export interface SymptomInput {
@@ -27,7 +47,7 @@ export interface SymptomInput {
 export interface RecommendedMedicine {
   name: string;
   reason: string;
-  imageUrl?: string;
+  imageUrl: string;
   mechanismOfAction: string;
   safetyProfile: string[];
 }
@@ -94,5 +114,13 @@ export interface GroundingSource {
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  image?: string; // base64
   sources?: GroundingSource[];
+}
+
+export interface UserSettings {
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  theme: 'light' | 'dark';
+  defaultLanguage: Language;
 }

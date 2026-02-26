@@ -1,13 +1,18 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { HealthPerception, Severity, Language } from '../types';
+import { HealthPerception, Severity, Language, User } from '../types';
 import { translations } from '../translations';
 import { GoogleGenAI, Modality } from "@google/genai";
+import { editImage } from '../services/geminiService';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface ReportDisplayProps {
   report: HealthPerception;
   onReset: () => void;
   language: Language;
+  user?: User | null;
+  onUpdateReport?: (report: HealthPerception) => void;
 }
 
 const InfoTooltip: React.FC<{ text: string }> = ({ text }) => {
@@ -50,8 +55,9 @@ function decode(base64: string) {
 
 async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number): Promise<AudioBuffer> {
   try {
-    const bufferToUse = data.byteLength % 2 === 0 ? data.buffer : data.buffer.slice(0, data.byteLength - 1);
-    const dataInt16 = new Int16Array(bufferToUse);
+    // Ensure the buffer is aligned for Int16Array
+    const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    const dataInt16 = new Int16Array(arrayBuffer);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
     for (let channel = 0; channel < numChannels; channel++) {
@@ -60,21 +66,217 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
     }
     return buffer;
   } catch (e) {
+    console.error("decodeAudioData error:", e);
     return ctx.createBuffer(numChannels, 1, sampleRate);
   }
 }
 
-const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language }) => {
+const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language, user, onUpdateReport }) => {
   const t = translations[language] || translations['English'];
   const [isReading, setIsReading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ url: string, name: string } | null>(null);
+  const [editingMedIndex, setEditingMedIndex] = useState<number | null>(null);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { return () => handleStopAudio(); }, []);
 
-  const handleDownloadPdf = () => { window.print(); };
+  const handleDownloadPdf = async () => {
+    if (!reportRef.current) return;
+    setIsDownloading(true);
+    setShowExportMenu(false);
+    
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#020617',
+        ignoreElements: (el) => el.classList.contains('no-print'),
+        onclone: (clonedDoc) => {
+          const style = clonedDoc.createElement('style');
+          style.innerHTML = `
+            .bg-slate-900 { background-color: #0f172a !important; }
+            .bg-slate-950 { background-color: #020617 !important; }
+            .bg-slate-800 { background-color: #1e293b !important; }
+            .bg-blue-600 { background-color: #2563eb !important; }
+            .bg-emerald-600 { background-color: #059669 !important; }
+            .bg-red-600 { background-color: #dc2626 !important; }
+            .bg-orange-600 { background-color: #ea580c !important; }
+            .bg-yellow-500 { background-color: #eab308 !important; }
+            .text-white { color: #ffffff !important; }
+            .text-slate-400 { color: #94a3b8 !important; }
+            .text-slate-300 { color: #cbd5e1 !important; }
+            .text-slate-200 { color: #e2e8f0 !important; }
+            .text-slate-100 { color: #f1f5f9 !important; }
+            .text-slate-500 { color: #64748b !important; }
+            .text-blue-500 { color: #3b82f6 !important; }
+            .text-emerald-500 { color: #10b981 !important; }
+            .text-red-400 { color: #f87171 !important; }
+            .text-orange-400 { color: #fb923c !important; }
+            .border-slate-800 { border-color: #1e293b !important; }
+            .border-slate-700 { border-color: #334155 !important; }
+            /* Fix for oklch in rings */
+            [class*="ring-"] { --tw-ring-color: rgba(255, 255, 255, 0.1) !important; }
+            .ring-red-600\\/30 { --tw-ring-color: rgba(220, 38, 38, 0.3) !important; }
+            .ring-orange-600\\/30 { --tw-ring-color: rgba(234, 88, 12, 0.3) !important; }
+            .ring-yellow-500\\/30 { --tw-ring-color: rgba(234, 179, 8, 0.3) !important; }
+            .ring-emerald-600\\/30 { --tw-ring-color: rgba(5, 150, 105, 0.3) !important; }
+          `;
+          clonedDoc.head.appendChild(style);
+        }
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Handle multi-page if needed (simplified)
+      let heightLeft = pdfHeight;
+      let position = 0;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // Add Metadata Page or Header
+      pdf.setProperties({
+        title: `BioSyn Clinical Report - ${user?.name || 'Patient'}`,
+        subject: 'Clinical Perception Analysis',
+        author: 'BioSyn AI',
+        keywords: 'health, report, biosyn, ai',
+        creator: 'BioSyn Intelligence Portal'
+      });
+
+      pdf.save(`BioSyn_Report_${user?.name?.replace(/\s+/g, '_') || 'Patient'}_${new Date().getTime()}.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      window.print();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadJson = () => {
+    const data = {
+      metadata: {
+        system: "BioSyn AI",
+        version: "2.5.0",
+        timestamp: new Date().toISOString(),
+        patient: user ? { name: user.name, email: user.email } : "Anonymous"
+      },
+      report
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `BioSyn_Data_${new Date().getTime()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleDownloadSummary = () => {
+    const summary = `
+# BIOSYN CLINICAL REPORT
+**Generated:** ${new Date().toLocaleString()}
+**Patient:** ${user?.name || 'Anonymous'}
+**Language:** ${language}
+
+---
+
+## CRITICALITY: ${report.severity}
+**Recommended Specialist:** ${report.recommendedSpecialist}
+
+## CLINICAL PERCEPTIONS
+${report.potentialCauses.map(c => `* ${c}`).join('\n')}
+
+## DIGITAL TWIN STATUS
+${report.digitalTwin.status}
+**Systems Affected:** ${report.digitalTwin.organSystemsAffected.join(', ')}
+
+## RECOMMENDED OTC SUPPORT
+${report.recommendedMedicines.map(m => `### ${m.name}\n* **Reason:** ${m.reason}\n* **Mechanism:** ${m.mechanismOfAction}`).join('\n\n')}
+
+## LIFESTYLE ADVICE
+${report.lifestyleAdvice.map(a => `* ${a}`).join('\n')}
+
+## EMERGENCY WARNING SIGNS
+${report.warningSigns.map(w => `* ${w}`).join('\n')}
+
+---
+**DISCLAIMER:**
+${report.disclaimer}
+    `.trim();
+
+    const blob = new Blob([summary], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `BioSyn_Summary_${new Date().getTime()}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleDownloadImage = (url: string, name: string) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${name.replace(/\s+/g, '_')}_BioSyn.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleEditImage = async (index: number) => {
+    if (!editPrompt.trim()) return;
+    setIsEditing(true);
+    try {
+      const med = report.recommendedMedicines[index];
+      const newUrl = await editImage(med.imageUrl, editPrompt);
+      
+      if (onUpdateReport) {
+        const updatedReport = { ...report };
+        updatedReport.recommendedMedicines = [...report.recommendedMedicines];
+        updatedReport.recommendedMedicines[index] = {
+          ...updatedReport.recommendedMedicines[index],
+          imageUrl: newUrl
+        };
+        onUpdateReport(updatedReport);
+      }
+      
+      setEditingMedIndex(null);
+      setEditPrompt('');
+    } catch (err) {
+      console.error("Image edit failed:", err);
+      alert("AI Image Synthesis failed. Please try a different prompt.");
+    } finally {
+      setIsEditing(false);
+    }
+  };
 
   const handleStopAudio = () => {
     try {
@@ -100,7 +302,10 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
     setIsGenerating(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || "";
+      if (!apiKey) throw new Error("AUTH_ERROR: API key missing.");
+      
+      const ai = new GoogleGenAI({ apiKey });
       const script = `Report summary in ${language}. Severity: ${report.severity}. specialist recommended: ${report.recommendedSpecialist}. Key potential causes: ${report.potentialCauses.join(', ')}. Please read the disclaimer carefully.`;
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
@@ -140,7 +345,7 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
   };
 
   return (
-    <div className="bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col ring-1 ring-white/5 animate-slide-up-fade report-container">
+    <div ref={reportRef} className="bg-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col ring-1 ring-white/5 animate-slide-up-fade report-container">
       {/* Header */}
       <div className="bg-slate-950 p-8 flex flex-col lg:flex-row justify-between items-center gap-6 border-b border-slate-800 report-header">
         <div className="text-center lg:text-left">
@@ -156,10 +361,40 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
             {isGenerating ? <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : (isReading && !isPaused ? <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> : <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>)}
             <span className="text-xs font-black uppercase tracking-widest">{isReading ? (isPaused ? 'Resume' : 'Pause') : t.listenReport}</span>
           </button>
-          <button onClick={handleDownloadPdf} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-black text-sm transition-all shadow-lg flex items-center space-x-2 border border-blue-400/20">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            <span>{t.downloadPdf}</span>
-          </button>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)} 
+              disabled={isDownloading} 
+              className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-black text-sm transition-all shadow-lg flex items-center space-x-2 border border-blue-400/20 disabled:opacity-50"
+            >
+              {isDownloading ? (
+                <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              )}
+              <span>{isDownloading ? 'Generating...' : 'Export'}</span>
+              <svg className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+
+            {showExportMenu && (
+              <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl z-[60] overflow-hidden animate-scaleIn origin-top-right">
+                <button onClick={handleDownloadPdf} className="w-full px-5 py-4 text-left hover:bg-slate-700 flex items-center space-x-3 transition-colors">
+                  <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></svg>
+                  <span className="text-xs font-bold text-slate-200">Clinical PDF (A4)</span>
+                </button>
+                <button onClick={handleDownloadSummary} className="w-full px-5 py-4 text-left hover:bg-slate-700 flex items-center space-x-3 transition-colors border-t border-slate-700">
+                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  <span className="text-xs font-bold text-slate-200">Markdown Summary</span>
+                </button>
+                <button onClick={handleDownloadJson} className="w-full px-5 py-4 text-left hover:bg-slate-700 flex items-center space-x-3 transition-colors border-t border-slate-700">
+                  <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+                  <span className="text-xs font-bold text-slate-200">Raw Data (JSON)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <button onClick={onReset} className="bg-slate-800/50 hover:bg-slate-800 text-slate-500 hover:text-white px-4 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest border border-slate-800">{t.reset}</button>
         </div>
       </div>
@@ -255,19 +490,57 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
           
           <div className="grid md:grid-cols-2 gap-6">
             {report.recommendedMedicines.map((med, i) => (
-              <div key={i} className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 flex items-start space-x-6 hover:border-blue-500/50 transition-all group">
-                <div className="w-24 h-24 bg-slate-900 rounded-2xl flex-shrink-0 flex items-center justify-center border border-slate-800 p-2 overflow-hidden shadow-inner">
+              <div key={i} className="bg-slate-950/80 border border-slate-800 rounded-3xl p-6 flex items-start space-x-6 hover:border-blue-500/50 transition-all group relative overflow-hidden">
+                <div className="w-24 h-24 bg-slate-900 rounded-2xl flex-shrink-0 flex items-center justify-center border border-slate-800 p-2 overflow-hidden shadow-inner relative group/img cursor-zoom-in" onClick={() => setSelectedImage({ url: med.imageUrl, name: med.name })}>
                   <img 
-                    src={med.imageUrl || "https://img.icons8.com/fluency/96/pill.png"} 
+                    src={med.imageUrl} 
                     alt={med.name} 
-                    className="w-16 h-16 object-contain group-hover:scale-110 transition-transform" 
+                    referrerPolicy="no-referrer"
+                    className="w-16 h-16 object-contain group-hover/img:scale-110 transition-transform" 
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=200&h=200";
+                    }}
                   />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                  </div>
                 </div>
                 <div className="flex-1 space-y-3">
                   <div className="flex justify-between items-start">
                     <h5 className="text-xl font-black text-white">{med.name}</h5>
-                    <span className="text-[8px] font-black text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded uppercase tracking-widest">OTC Info</span>
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => setEditingMedIndex(editingMedIndex === i ? null : i)}
+                        className="text-[8px] font-black text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded uppercase tracking-widest hover:bg-blue-500/10 transition-colors"
+                      >
+                        {editingMedIndex === i ? 'Cancel' : 'Edit AI'}
+                      </button>
+                      <span className="text-[8px] font-black text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded uppercase tracking-widest">OTC Info</span>
+                    </div>
                   </div>
+                  
+                  {editingMedIndex === i && (
+                    <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 animate-scaleIn">
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Add a retro filter..." 
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-[10px] text-white outline-none focus:border-blue-500"
+                        value={editPrompt}
+                        onChange={(e) => setEditPrompt(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleEditImage(i)}
+                      />
+                      <div className="flex justify-end mt-2">
+                        <button 
+                          onClick={() => handleEditImage(i)}
+                          disabled={isEditing || !editPrompt.trim()}
+                          className="bg-blue-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest disabled:opacity-50"
+                        >
+                          {isEditing ? 'Synthesizing...' : 'Apply'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-xs text-slate-400 font-medium leading-relaxed">{med.reason}</p>
                   <div className="pt-2 border-t border-slate-800">
                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Mechanism</p>
@@ -342,6 +615,43 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
           {report.disclaimer}
         </p>
       </div>
+
+      {/* Zoom Modal */}
+      {selectedImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-12 animate-fadeIn no-print">
+          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xl" onClick={() => setSelectedImage(null)}></div>
+          <div className="relative max-w-4xl w-full bg-slate-900 border-2 border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl animate-scaleIn">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-black text-white">{selectedImage.name}</h3>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">High-Fidelity Clinical Visualization</p>
+              </div>
+              <button 
+                onClick={() => setSelectedImage(null)}
+                className="p-2 text-slate-500 hover:text-white transition-colors"
+              >
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-8 flex items-center justify-center bg-slate-950/50 min-h-[400px]">
+              <img 
+                src={selectedImage.url} 
+                alt={selectedImage.name} 
+                className="max-w-full max-h-[60vh] object-contain shadow-2xl rounded-2xl"
+              />
+            </div>
+            <div className="p-6 border-t border-slate-800 flex justify-center space-x-4">
+              <button 
+                onClick={() => handleDownloadImage(selectedImage.url, selectedImage.name)}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center space-x-3 shadow-lg shadow-blue-900/40"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                <span>Download Visualization</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -11,14 +11,9 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react(), tailwindcss()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || ""),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || ""),
-        'process.env.NODE_ENV': JSON.stringify(mode),
-      },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+          '@': path.resolve(process.cwd(), '.'),
         }
       }
     };

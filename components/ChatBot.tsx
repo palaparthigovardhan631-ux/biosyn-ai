@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { HealthPerception, ChatMessage, Language, GroundingSource } from '../types';
 import { chatWithHealthAssistant } from '../services/geminiService';
 import { translations } from '../translations';
@@ -8,9 +9,9 @@ import { GoogleGenAI, Modality } from "@google/genai";
 interface ChatBotProps {
   context: HealthPerception;
   isOnline: boolean;
+  messages: ChatMessage[];
+  onMessagesChange: (messages: ChatMessage[]) => void;
 }
-
-const STORAGE_KEY = 'biosyn_chat_history';
 
 // Audio Utilities
 function decode(base64: string) {
@@ -53,31 +54,22 @@ async function decodeAudioData(
   }
 }
 
-const ChatBot: React.FC<ChatBotProps> = ({ context, isOnline }) => {
+const ChatBot: React.FC<ChatBotProps> = ({ context, isOnline, messages, onMessagesChange }) => {
   const language: Language = context.language || 'English';
   const t = translations[language];
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try { setMessages(JSON.parse(saved)); } catch (e) {}
-    }
     return () => handleStopAudio();
   }, []);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    }
-  }, [messages]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,7 +91,11 @@ const ChatBot: React.FC<ChatBotProps> = ({ context, isOnline }) => {
     setSpeakingIdx(idx);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || "";
+      if (!apiKey) {
+        throw new Error("AUTH_ERROR: Gemini API key is missing. Please select a key.");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: msg }] }],
@@ -125,40 +121,66 @@ const ChatBot: React.FC<ChatBotProps> = ({ context, isOnline }) => {
       source.onended = () => setSpeakingIdx(null);
       source.start();
       sourceRef.current = source;
-    } catch (err) {
+    } catch (err: any) {
       console.error("handleSpeak error:", err);
       setSpeakingIdx(null);
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isTyping || !isOnline) return;
+    if ((!input.trim() && !selectedImage) || isTyping || !isOnline) return;
 
     const userMessageText = input.trim();
-    const newUserMessage: ChatMessage = { role: 'user', text: userMessageText };
+    const newUserMessage: ChatMessage = { 
+      role: 'user', 
+      text: userMessageText || (selectedImage ? "[Image Attached]" : ""),
+      image: selectedImage || undefined
+    };
     
     setInput('');
-    setMessages(prev => [...prev, newUserMessage]);
+    setSelectedImage(null);
+    onMessagesChange([...messages, newUserMessage]);
     setIsTyping(true);
 
     try {
       const apiHistory = messages.map(m => ({
         role: m.role,
-        parts: [{ text: m.text }]
+        parts: m.image ? [
+          { text: m.text },
+          { inlineData: { data: m.image.split(',')[1], mimeType: "image/png" } }
+        ] : [{ text: m.text }]
       }));
 
       const { text, sources } = await chatWithHealthAssistant(
         apiHistory, 
         `Context: ${JSON.stringify(context)}. User: ${userMessageText}`,
+        newUserMessage.image || undefined,
         language
       );
 
       const assistantMessage: ChatMessage = { role: 'model', text, sources };
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
+      onMessagesChange([...messages, newUserMessage, assistantMessage]);
+    } catch (err: any) {
       console.error("handleSend failed:", err);
-      setMessages(prev => [...prev, { role: 'model', text: 'Perception link interrupted. Please verify connection.' }]);
+      let errorMsg = 'Perception link interrupted. Please verify connection.';
+      if (err.message?.includes("API key")) {
+        errorMsg = 'AUTH_ERROR: Gemini API key is missing or invalid. Please re-authenticate.';
+      } else if (err.message?.includes("safety")) {
+        errorMsg = 'SAFETY_ERROR: Query flagged by safety protocols.';
+      }
+      onMessagesChange([...messages, newUserMessage, { role: 'model', text: errorMsg }]);
     } finally { setIsTyping(false); }
   };
 
@@ -177,7 +199,12 @@ const ChatBot: React.FC<ChatBotProps> = ({ context, isOnline }) => {
         {messages.map((m, i) => (
           <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-scaleIn`}>
             <div className={`relative max-w-[90%] px-5 py-4 rounded-2xl text-lg font-medium shadow-lg ${m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-100 border border-slate-700 rounded-tl-none'}`}>
-              {m.text}
+              {m.image && (
+                <img src={m.image} alt="User attachment" className="max-w-full rounded-lg mb-3 border border-white/10" />
+              )}
+              <div className="markdown-body prose prose-invert prose-sm max-w-none">
+                <ReactMarkdown>{m.text}</ReactMarkdown>
+              </div>
               {m.role === 'model' && (
                 <button 
                   onClick={() => handleSpeak(m.text, i)}
@@ -209,10 +236,49 @@ const ChatBot: React.FC<ChatBotProps> = ({ context, isOnline }) => {
         <div ref={scrollRef} />
       </div>
 
-      <form onSubmit={handleSend} className="p-4 border-t-2 border-slate-800 flex space-x-3 bg-slate-900">
-        <input type="text" placeholder={t.enterQuery} className="flex-1 bg-slate-800 border-2 border-slate-700 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 transition-all" value={input} onChange={(e) => setInput(e.target.value)} />
-        <button type="submit" disabled={!input.trim() || isTyping} className="bg-blue-600 text-white p-4 rounded-xl shadow-xl active:scale-90 transition-all disabled:opacity-50"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg></button>
-      </form>
+      <div className="p-4 border-t-2 border-slate-800 bg-slate-900">
+        {selectedImage && (
+          <div className="mb-3 relative inline-block">
+            <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-lg border-2 border-blue-500" />
+            <button 
+              onClick={() => setSelectedImage(null)}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+        )}
+        <form onSubmit={handleSend} className="flex space-x-3">
+          <button 
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-slate-800 text-slate-400 p-4 rounded-xl hover:text-white transition-colors border-2 border-slate-700"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          </button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImageSelect} 
+            accept="image/*" 
+            className="hidden" 
+          />
+          <input 
+            type="text" 
+            placeholder={t.enterQuery} 
+            className="flex-1 bg-slate-800 border-2 border-slate-700 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 transition-all" 
+            value={input} 
+            onChange={(e) => setInput(e.target.value)} 
+          />
+          <button 
+            type="submit" 
+            disabled={(!input.trim() && !selectedImage) || isTyping} 
+            className="bg-blue-600 text-white p-4 rounded-xl shadow-xl active:scale-90 transition-all disabled:opacity-50"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

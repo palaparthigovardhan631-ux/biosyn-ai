@@ -121,7 +121,11 @@ const VoiceLab: React.FC<VoiceLabProps> = ({ language }) => {
     setLastAudioBuffer(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || "";
+      if (!apiKey) {
+        throw new Error("AUTH_ERROR: Gemini API key is missing. Please select a key.");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       
       let config: any = {
         responseModalities: [Modality.AUDIO],
@@ -184,7 +188,13 @@ const VoiceLab: React.FC<VoiceLabProps> = ({ language }) => {
       setIsPlaying(true);
     } catch (err: any) {
       console.error("Synthesis failed:", err);
-      setError("Clinical synthesis at capacity. Please retry in 60s.");
+      if (err.message?.includes("AUTH_ERROR")) {
+        setError(err.message);
+      } else if (err.message?.includes("safety")) {
+        setError("SAFETY_ERROR: Content flagged by safety protocols.");
+      } else {
+        setError("SYSTEM_ERROR: Clinical synthesis at capacity. Please retry in 60s.");
+      }
     } finally {
       setIsGenerating(false);
     }

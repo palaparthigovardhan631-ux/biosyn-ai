@@ -10,16 +10,17 @@
         window.process = { 
             env: { 
                 NODE_ENV: 'production',
-                API_KEY: "" 
+                API_KEY: "",
+                GEMINI_API_KEY: ""
             } 
         };
     </script>
-
+    <script src="https://accounts.google.com/gsi/client" async defer onerror="console.error('Failed to load Google Sign-In script')"></script>
+    
     <!-- UI & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="antialiased bg-[#020617] text-[#f8fafc]">
     <div id="root"></div>
