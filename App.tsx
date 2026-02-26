@@ -320,6 +320,15 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleDeleteHistory = (id: string) => {
+    if (!user) return;
+    const updatedHistory = (user.healthHistory || []).filter(item => item.id !== id);
+    handleUpdateUser({
+      ...user,
+      healthHistory: updatedHistory
+    });
+  };
+
   const t = translations[selectedLanguage] || translations['English'];
 
   return (
@@ -362,6 +371,7 @@ const App: React.FC = () => {
                     onUpdateUser={handleUpdateUser} 
                     language={selectedLanguage} 
                     onViewReport={handleViewHistoryReport}
+                    onDeleteHistory={handleDeleteHistory}
                   />
                 ) : currentView === 'wellness' ? (
                   <WellnessArticles language={selectedLanguage} />

@@ -76,7 +76,6 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
   const [isReading, setIsReading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ url: string, name: string } | null>(null);
   const [editingMedIndex, setEditingMedIndex] = useState<number | null>(null);
@@ -92,7 +91,6 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
   const handleDownloadPdf = async () => {
     if (!reportRef.current) return;
     setIsDownloading(true);
-    setShowExportMenu(false);
     
     try {
       const canvas = await html2canvas(reportRef.current, {
@@ -196,7 +194,6 @@ const ReportDisplay: React.FC<ReportDisplayProps> = ({ report, onReset, language
     link.download = `BioSyn_Data_${new Date().getTime()}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setShowExportMenu(false);
   };
 
   const handleDownloadSummary = () => {
@@ -239,7 +236,6 @@ ${report.disclaimer}
     link.download = `BioSyn_Summary_${new Date().getTime()}.md`;
     link.click();
     URL.revokeObjectURL(url);
-    setShowExportMenu(false);
   };
 
   const handleDownloadImage = (url: string, name: string) => {
@@ -362,38 +358,18 @@ ${report.disclaimer}
             <span className="text-xs font-black uppercase tracking-widest">{isReading ? (isPaused ? 'Resume' : 'Pause') : t.listenReport}</span>
           </button>
           
-          <div className="relative">
-            <button 
-              onClick={() => setShowExportMenu(!showExportMenu)} 
-              disabled={isDownloading} 
-              className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-black text-sm transition-all shadow-lg flex items-center space-x-2 border border-blue-400/20 disabled:opacity-50"
-            >
-              {isDownloading ? (
-                <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              )}
-              <span>{isDownloading ? 'Generating...' : 'Export'}</span>
-              <svg className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
-            </button>
-
-            {showExportMenu && (
-              <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl z-[60] overflow-hidden animate-scaleIn origin-top-right">
-                <button onClick={handleDownloadPdf} className="w-full px-5 py-4 text-left hover:bg-slate-700 flex items-center space-x-3 transition-colors">
-                  <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"/></svg>
-                  <span className="text-xs font-bold text-slate-200">Clinical PDF (A4)</span>
-                </button>
-                <button onClick={handleDownloadSummary} className="w-full px-5 py-4 text-left hover:bg-slate-700 flex items-center space-x-3 transition-colors border-t border-slate-700">
-                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  <span className="text-xs font-bold text-slate-200">Markdown Summary</span>
-                </button>
-                <button onClick={handleDownloadJson} className="w-full px-5 py-4 text-left hover:bg-slate-700 flex items-center space-x-3 transition-colors border-t border-slate-700">
-                  <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
-                  <span className="text-xs font-bold text-slate-200">Raw Data (JSON)</span>
-                </button>
-              </div>
+          <button 
+            onClick={handleDownloadPdf} 
+            disabled={isDownloading} 
+            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-4 rounded-xl font-black text-sm transition-all shadow-lg flex items-center space-x-2 border border-blue-400/20 disabled:opacity-50"
+          >
+            {isDownloading ? (
+              <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
             )}
-          </div>
+            <span>{isDownloading ? 'Generating...' : t.downloadPdf}</span>
+          </button>
 
           <button onClick={onReset} className="bg-slate-800/50 hover:bg-slate-800 text-slate-500 hover:text-white px-4 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest border border-slate-800">{t.reset}</button>
         </div>

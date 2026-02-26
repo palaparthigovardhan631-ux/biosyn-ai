@@ -8,9 +8,10 @@ interface UserProfileProps {
   onUpdateUser: (user: User) => void;
   language: Language;
   onViewReport: (report: HealthPerception) => void;
+  onDeleteHistory: (id: string) => void;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdateUser, language, onViewReport }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdateUser, language, onViewReport, onDeleteHistory }) => {
   const t = translations[language] || translations['English'];
   const [isEditing, setIsEditing] = useState(false);
   const [editedUser, setEditedUser] = useState<User>(user);
@@ -148,6 +149,52 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdateUser, language,
               </div>
             </div>
           </div>
+
+          <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">
+              {t.contactDetails}
+            </h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">{t.mobile}</label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editedUser.mobile || ''}
+                    onChange={(e) => setEditedUser({ ...editedUser, mobile: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500"
+                  />
+                ) : (
+                  <p className="text-white font-bold">{user.mobile || '9014280366'}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">{t.instagram}</label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editedUser.instagram || ''}
+                    onChange={(e) => setEditedUser({ ...editedUser, instagram: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500"
+                  />
+                ) : (
+                  <p className="text-white font-bold">{user.instagram || '__goavrdhan__oo7'}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">{t.address}</label>
+                {isEditing ? (
+                  <textarea
+                    value={editedUser.address || ''}
+                    onChange={(e) => setEditedUser({ ...editedUser, address: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-blue-500 resize-none h-20"
+                  />
+                ) : (
+                  <p className="text-white font-bold text-xs leading-relaxed">{user.address || 'manikonda 521260 near-(vijayawada)'}</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="md:col-span-2 space-y-8">
@@ -201,11 +248,22 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdateUser, language,
                     className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 hover:border-blue-500/50 hover:bg-slate-900 transition-all cursor-pointer group relative overflow-hidden"
                     onClick={() => item.fullReport && onViewReport(item.fullReport)}
                   >
-                    <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="bg-blue-600 text-white p-2 rounded-lg shadow-lg">
+                    <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-2">
+                      <div 
+                        className="bg-blue-600 text-white p-2 rounded-lg shadow-lg hover:bg-blue-500 transition-colors"
+                        onClick={(e) => { e.stopPropagation(); item.fullReport && onViewReport(item.fullReport); }}
+                      >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </div>
+                      <div 
+                        className="bg-red-600 text-white p-2 rounded-lg shadow-lg hover:bg-red-500 transition-colors"
+                        onClick={(e) => { e.stopPropagation(); onDeleteHistory(item.id); }}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </div>
                     </div>

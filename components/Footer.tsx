@@ -40,7 +40,7 @@ const Footer: React.FC<FooterProps> = ({ language }) => {
 
           {/* Contact Details */}
           <div>
-            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-6">Contact Details</h4>
+            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-6">{t.contactDetails}</h4>
             <ul className="space-y-4">
               <li>
                 <a 
@@ -59,11 +59,21 @@ const Footer: React.FC<FooterProps> = ({ language }) => {
                 <div className="flex items-center text-slate-400">
                   <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center mr-3">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                  </div>
+                  <span className="text-xs font-medium">9014280366</span>
+                </div>
+              </li>
+              <li>
+                <div className="flex items-center text-slate-400">
+                  <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center mr-3">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <span className="text-xs font-medium">Global Clinical Network</span>
+                  <span className="text-xs font-medium leading-tight">manikonda 521260 near-(vijayawada)</span>
                 </div>
               </li>
             </ul>
@@ -71,21 +81,12 @@ const Footer: React.FC<FooterProps> = ({ language }) => {
 
           {/* Policies */}
           <div>
-            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-6">Legal & Policies</h4>
-            <ul className="space-y-3">
-              <li>
-                <button className="text-slate-400 hover:text-white text-xs font-medium transition-colors">Privacy Protocol</button>
-              </li>
-              <li>
-                <button className="text-slate-400 hover:text-white text-xs font-medium transition-colors">Terms of Engagement</button>
-              </li>
-              <li>
-                <button className="text-slate-400 hover:text-white text-xs font-medium transition-colors">Data Sovereignty</button>
-              </li>
-              <li>
-                <button className="text-slate-400 hover:text-white text-xs font-medium transition-colors">Clinical Disclaimer</button>
-              </li>
-            </ul>
+            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-6">{t.termsAndPolicies}</h4>
+            <div className="bg-slate-900/30 border border-slate-800/50 rounded-xl p-4">
+              <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                {t.termsContent}
+              </p>
+            </div>
           </div>
         </div>
 

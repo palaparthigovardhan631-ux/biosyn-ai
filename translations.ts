@@ -166,6 +166,8 @@ const English = {
   contactDetails: "Contact Details",
   deleteHistory: "Delete Entry",
   profileSaved: "Profile updated successfully",
+  termsAndPolicies: "Terms and Policies",
+  termsContent: "BioSyn is for informational purposes only. It is not a substitute for professional medical advice. Always consult a physician in case of emergencies. Your data is handled with strict confidentiality.",
   settingsTitle: "System Settings",
   settingsDesc: "Configure your clinical portal preferences and security protocols.",
   notifications: "Notifications",
@@ -460,6 +462,13 @@ export const translations: Record<Language, Record<string, string>> = {
     multiSpeaker: "బహుళ స్పీకర్ మోడ్",
     singleSpeaker: "ఒకే స్పీకర్ మోడ్",
     speakerA: "నిపుణుడు",
-    speakerB: "రోగి/రెసిడెంట్"
+    speakerB: "రోగి/రెసిడెంట్",
+    contactDetails: "సంప్రదింపు వివరాలు",
+    mobile: "మొబైల్ నంబర్",
+    instagram: "ఇన్‌స్టాగ్రామ్ ID",
+    address: "చిరునామా",
+    deleteHistory: "తొలగించు",
+    termsAndPolicies: "నిబంధనలు మరియు విధానాలు",
+    termsContent: "బయోసిన్ (BioSyn) అనేది సమాచార ప్రయోజనాల కోసం మాత్రమే. ఇది వృత్తిపరమైన వైద్య సలహాకు ప్రత్యామ్నాయం కాదు. అత్యవసర పరిస్థితుల్లో ఎల్లప్పుడూ వైద్యుడిని సంప్రదించండి. మీ డేటా గోప్యంగా ఉంచబడుతుంది."
   }
 };

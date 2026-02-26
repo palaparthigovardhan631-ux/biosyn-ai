@@ -315,7 +315,7 @@ const SymptomForm: React.FC<SymptomFormProps> = ({ onSubmit, selectedLanguage })
     let error = '';
     switch (name) {
       case 'description':
-        if (!value || value.trim().length < 20) error = getT('validationErrorDescription');
+        if (!value || value.trim().length < 1) error = getT('validationErrorDescription');
         break;
       case 'duration':
         if (!value || value.trim().length < 2) error = getT('validationErrorDuration');

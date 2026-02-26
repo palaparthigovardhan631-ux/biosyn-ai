@@ -30,6 +30,7 @@ export interface User {
   mobile?: string;
   instagram?: string;
   address?: string;
+  allergies?: string;
   healthHistory?: HealthHistoryItem[];
   chatHistory?: ChatMessage[];
 }
